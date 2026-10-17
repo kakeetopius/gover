@@ -1,3 +1,4 @@
+// Package cmd contains gover's version management logic.
 package cmd
 
 import "github.com/spf13/cobra"
@@ -10,8 +11,8 @@ func Command() *cobra.Command {
 	}
 
 	rootCmd.AddCommand(
-		CheckCommand(),
 		UpdateCommand(),
+		SwitchCommand(),
 	)
 
 	return rootCmd

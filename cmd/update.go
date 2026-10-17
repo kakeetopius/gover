@@ -1,13 +1,128 @@
 package cmd
 
-import "github.com/spf13/cobra"
+import (
+	"cmp"
+	"context"
+	"fmt"
+	"go/version"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/spf13/cobra"
+)
 
 func UpdateCommand() *cobra.Command {
-	checkCommand := &cobra.Command{
+	updateCommand := &cobra.Command{
 		Use:          "update",
-		Short:        "Update the go version if there are newer releases.",
+		Short:        "Update or Install to the latest stable go version",
 		SilenceUsage: true,
+		RunE:         runUpdate,
 	}
 
-	return checkCommand
+	updateCommand.Flags().Bool("force", false, "Force update.")
+
+	return updateCommand
+}
+
+func runUpdate(cmd *cobra.Command, args []string) error {
+	fmt.Println("Getting go versions...")
+	releases, err := GetReleases(context.Background(), false)
+	if err != nil {
+		return err
+	}
+
+	goos := cmp.Or(os.Getenv("GOOS"), runtime.GOOS)
+	goarch := cmp.Or(os.Getenv("GOARCH"), runtime.GOARCH)
+
+	if goos == "" {
+		return fmt.Errorf("could not GOOS environment variable. make sure to set it")
+	}
+	if goarch == "" {
+		return fmt.Errorf("could not GOARCH environment variable. make sure to set it")
+	}
+
+	releeaseArchive := releases.
+		Filter(FilterReleaseStable).
+		First().
+		Filter(FilterOS(goos)).
+		Filter(FilterArch(goarch)).
+		Filter(FilterFileKind("archive")).
+		FirstFile()
+
+	if releeaseArchive == nil {
+		return fmt.Errorf("could not get the latest go release")
+	}
+	versionNum := releeaseArchive.CleanedVersion()
+
+	fmt.Printf("latest go version is %v\n", versionNum)
+
+	currentVersion, err := GetCurrentGoVersion()
+	if err != nil {
+		return err
+	}
+
+	force, err := cmd.Flags().GetBool("force")
+	if err != nil {
+		return err
+	}
+	binDir, err := GetDefaultBinDirectory()
+	if err != nil {
+		return err
+	}
+
+	installDir, err := GetInstallDirectory()
+	if err != nil {
+		return err
+	}
+
+	if version.Compare(currentVersion, releeaseArchive.Version) >= 0 && !force {
+		fmt.Println("Already at the latest go version. Nothing to update.")
+		return nil
+	}
+
+	alreadyInstalled, err := CheckIfGoVersionIsInstalled(versionNum)
+	if err != nil {
+		return err
+	}
+	if alreadyInstalled && !force {
+		err = SymLinkGoBinary(versionNum, binDir)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("The latest go version %v is now active.\n", versionNum)
+		fmt.Printf("Make sure to add %v to the environment variable PATH.\n", binDir)
+		return nil
+	}
+
+	fmt.Println("Downloading...")
+	err = releeaseArchive.Download(context.Background())
+	if err != nil {
+		return err
+	}
+	fmt.Println("Download Complete.")
+
+	fmt.Println("Verifying Cheksum...")
+	err = releeaseArchive.VerifyChecksum()
+	if err != nil {
+		return err
+	}
+	fmt.Println("Cheksum okay.")
+
+	fmt.Println("Extracting go source...")
+	err = releeaseArchive.ExtractTo(installDir)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Extraction Complete")
+
+	err = SymLinkGoBinary(versionNum, binDir)
+	if err != nil {
+		return err
+	}
+	fmt.Println("The latest go source has been installed to:", filepath.Join(installDir, versionNum))
+	fmt.Println("The latest go binary has been symlinked to the directory:", binDir)
+	fmt.Println("Make sure to prepend it to the PATH environment variable.")
+
+	return nil
 }

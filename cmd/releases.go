@@ -84,7 +84,7 @@ func (r GoReleases) Filter(f ReleasesFilterFunc) GoReleases {
 	return filtered
 }
 
-func (r GoReleases) Latest() *GoRelease {
+func (r GoReleases) First() *GoRelease {
 	if len(r) > 0 {
 		return &r[0]
 	}
@@ -202,13 +202,13 @@ func (f *GoReleaseFile) Save(dstDir string) error {
 	return err
 }
 
-type ErrCheckSumMismatch struct {
+type ErrChecksumMismatch struct {
 	Expected string
 	Got      string
 }
 
-func (e ErrCheckSumMismatch) Error() string {
-	return fmt.Sprintf("checksums for the downloaded release do not match, expected %v got %v", e.Expected, e.Got)
+func (e ErrChecksumMismatch) Error() string {
+	return fmt.Sprintf("checksum for the downloaded release does not match the expected one, expected %v got %v", e.Expected, e.Got)
 }
 
 func (f *GoReleaseFile) VerifyChecksum() error {
@@ -226,7 +226,7 @@ func (f *GoReleaseFile) VerifyChecksum() error {
 
 	result := subtle.ConstantTimeCompare([]byte(strings.ToLower(f.SHA256)), []byte(strings.ToLower(got))) // compare the two hashes safely with subtle package
 	if result != 1 {
-		return ErrCheckSumMismatch{Expected: f.SHA256, Got: got}
+		return ErrChecksumMismatch{Expected: f.SHA256, Got: got}
 	}
 
 	return nil
