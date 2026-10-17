@@ -40,7 +40,7 @@ func GetCurrentGoVersion() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	re, err := regexp.Compile(`go version (go\d+\.\d+\.\d+)`)
+	re, err := regexp.Compile(`go version (go\d+\.\d+(?:\.\d+)?)`)
 	if err != nil {
 		return "", err
 	}
