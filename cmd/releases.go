@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -174,6 +177,11 @@ func (f *GoReleaseFile) Download(ctx context.Context) error {
 	return nil
 }
 
+func (f *GoReleaseFile) CleanedVersion() string {
+	// f.Version is in format go27.0.2 so we remove the word go
+	return strings.TrimPrefix(f.Version, "go")
+}
+
 func (f *GoReleaseFile) Save(dstDir string) error {
 	if f.downloadedFile == nil {
 		return fmt.Errorf("Release file not yet downloaded")
@@ -219,6 +227,88 @@ func (f *GoReleaseFile) VerifyChecksum() error {
 	result := subtle.ConstantTimeCompare([]byte(strings.ToLower(f.SHA256)), []byte(strings.ToLower(got))) // compare the two hashes safely with subtle package
 	if result != 1 {
 		return ErrCheckSumMismatch{Expected: f.SHA256, Got: got}
+	}
+
+	return nil
+}
+
+func (f *GoReleaseFile) ExtractTo(dstDir string) error {
+	if f.Kind != "archive" {
+		return fmt.Errorf("the file '%v' is not an archive", f.Filename)
+	}
+
+	if f.downloadedFile == nil {
+		return fmt.Errorf("Release file not yet downloaded")
+	}
+
+	if dstDir == "" {
+		return fmt.Errorf("no destination directory given to extract archive.")
+	}
+
+	gzipReader, err := gzip.NewReader(bytes.NewReader(f.downloadedFile))
+	if err != nil {
+		return err
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+	if err != nil {
+		return err
+	}
+
+	version := f.CleanedVersion()
+
+	for {
+		hdr, err := tarReader.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		// this makes sure files are saved under the a directory named after the version instead of the directory go
+		fileName := strings.Replace(hdr.Name, "go", version, 1)
+
+		dst := filepath.Join(dstDir, fileName)
+
+		// prevent paths in archive from escaping dstDir
+		rel, err := filepath.Rel(dstDir, dst)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("invalid archive path: %s", hdr.Name)
+		}
+
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			err = os.MkdirAll(dst, os.FileMode(hdr.Mode))
+			if err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			err = os.MkdirAll(filepath.Dir(dst), 0o755)
+			if err != nil {
+				return err
+			}
+
+			err = func() error {
+				out, err := os.OpenFile(dst, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(hdr.Mode))
+				if err != nil {
+					return err
+				}
+				defer out.Close()
+
+				_, err = io.Copy(out, tarReader)
+				if err != nil {
+					return err
+				}
+
+				return nil
+			}()
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
