@@ -37,7 +37,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		}
 		versions = releases.VersionsSlice()
 	} else {
-		heading = "Installed Versions"
+		heading = "Go Versions Installed by gover"
 		versions, err = GetInstalledVersions()
 		if err != nil {
 			return err

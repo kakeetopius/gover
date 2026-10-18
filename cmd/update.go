@@ -21,19 +21,28 @@ func UpdateCommand() *cobra.Command {
 		RunE:         runUpdate,
 	}
 
+	updateCommand.Flags().Bool("unstable", false, "Allow updating to an unstable version if it is the latest one.")
+
 	return updateCommand
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
+	allowUnstable, err := cmd.Flags().GetBool("unstable")
+	if err != nil {
+		return err
+	}
+
 	fmt.Println("Getting go versions...")
 	releases, err := GetReleases(context.Background(), false)
 	if err != nil {
 		return err
 	}
+	if !allowUnstable {
+		releases = releases.Filter(FilterReleaseStable)
+	}
 
 	goos := cmp.Or(os.Getenv("GOOS"), runtime.GOOS)
 	goarch := cmp.Or(os.Getenv("GOARCH"), runtime.GOARCH)
-
 	if goos == "" {
 		return fmt.Errorf("could not GOOS environment variable. make sure to set it")
 	}
@@ -41,11 +50,9 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not GOARCH environment variable. make sure to set it")
 	}
 
-	releease := releases.
-		Filter(FilterReleaseStable).
-		First()
+	releease := releases.First() // returns the latest version
 	if releease == nil {
-		return fmt.Errorf("could not get the latest go release")
+		return fmt.Errorf("could not get the latest go release for %v/%v", goos, goarch)
 	}
 
 	releaseFile := releease.
@@ -54,8 +61,8 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		Filter(FilterFileKind("archive")).
 		FirstFile()
 
-	if releease == nil {
-		return fmt.Errorf("could not get the latest go release")
+	if releaseFile == nil {
+		return fmt.Errorf("could not get the latest go release for %v/%v", goos, goarch)
 	}
 	versionNum := releaseFile.CleanedVersion()
 

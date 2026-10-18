@@ -218,3 +218,14 @@ func SortVersions(versions []string) []string {
 
 	return versions
 }
+
+// DeleteVersionDirectory deletes a go version installed in the directory returned by [GetInstallDirectory]
+func DeleteVersionDirectory(version string) error {
+	installDir, err := GetInstallDirectory()
+	if err != nil {
+		return err
+	}
+	versionDir := filepath.Join(installDir, version)
+
+	return os.RemoveAll(versionDir)
+}

@@ -14,6 +14,7 @@ func Command() *cobra.Command {
 		UpdateCommand(),
 		SwitchCommand(),
 		ListCommand(),
+		PurgeCommand(),
 	)
 
 	return rootCmd
