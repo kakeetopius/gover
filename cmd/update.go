@@ -42,18 +42,23 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not GOARCH environment variable. make sure to set it")
 	}
 
-	releeaseArchive := releases.
+	releease := releases.
 		Filter(FilterReleaseStable).
-		First().
+		First()
+	if releease == nil {
+		return fmt.Errorf("could not get the latest go release")
+	}
+
+	releaseFile := releease.
 		Filter(FilterOS(goos)).
 		Filter(FilterArch(goarch)).
 		Filter(FilterFileKind("archive")).
 		FirstFile()
 
-	if releeaseArchive == nil {
+	if releease == nil {
 		return fmt.Errorf("could not get the latest go release")
 	}
-	versionNum := releeaseArchive.CleanedVersion()
+	versionNum := releaseFile.CleanedVersion()
 
 	fmt.Printf("latest go version is %v\n", versionNum)
 
@@ -76,7 +81,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if version.Compare(currentVersion, releeaseArchive.Version) >= 0 && !force {
+	if version.Compare(currentVersion, releease.Version) >= 0 && !force {
 		fmt.Println("Already at the latest go version. Nothing to update.")
 		return nil
 	}
@@ -96,21 +101,21 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("Downloading...")
-	err = releeaseArchive.Download(context.Background())
+	err = releaseFile.Download(context.Background())
 	if err != nil {
 		return err
 	}
 	fmt.Println("Download Complete.")
 
 	fmt.Println("Verifying Cheksum...")
-	err = releeaseArchive.VerifyChecksum()
+	err = releaseFile.VerifyChecksum()
 	if err != nil {
 		return err
 	}
 	fmt.Println("Cheksum okay.")
 
 	fmt.Println("Extracting go source...")
-	err = releeaseArchive.ExtractTo(installDir)
+	err = releaseFile.ExtractTo(installDir)
 	if err != nil {
 		return err
 	}

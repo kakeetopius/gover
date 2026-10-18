@@ -113,8 +113,8 @@ func CheckIfGoVersionIsInstalled(version string) (bool, error) {
 }
 
 // SymLinkGoBinary creates a symlink of the go binary from the version's directory within the installation directory returned by [GetInstallDirectory] to the
-// destination directory 'dst' or if dst is empty to the bin directory returned by [GetDefaultBinDirectory]
-func SymLinkGoBinary(version string, dst string) error {
+// destination directory 'dstDir' or if dst is empty to the bin directory returned by [GetDefaultBinDirectory]
+func SymLinkGoBinary(version string, dstDir string) error {
 	installDir, err := GetInstallDirectory()
 	if err != nil {
 		return err
@@ -138,14 +138,19 @@ func SymLinkGoBinary(version string, dst string) error {
 		return fmt.Errorf("the path %v should be a file not a directory", oldPath)
 	}
 
-	if dst == "" {
+	if dstDir == "" {
 		binDir, err := GetDefaultBinDirectory()
 		if err != nil {
 			return err
 		}
-		dst = binDir
+		dstDir = binDir
 	}
-	newPath := filepath.Join(dst, "go")
+
+	err = os.MkdirAll(dstDir, 0o755)
+	if err != nil {
+		return err
+	}
+	newPath := filepath.Join(dstDir, "go")
 
 	err = os.Remove(newPath)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
