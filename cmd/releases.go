@@ -191,7 +191,7 @@ func (f *GoReleaseFile) Save(dstDir string) error {
 		dstDir = os.TempDir()
 	}
 
-	dst, err := os.OpenFile(filepath.Join(dstDir, f.Filename), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o760)
+	dst, err := os.OpenFile(filepath.Join(dstDir, f.Filename), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o755)
 	if err != nil {
 		return err
 	}
@@ -281,18 +281,22 @@ func (f *GoReleaseFile) ExtractTo(dstDir string) error {
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			err = os.MkdirAll(dst, os.FileMode(hdr.Mode))
+			err = os.MkdirAll(dst, 0o755)
 			if err != nil {
 				return err
 			}
 		case tar.TypeReg:
+			perm := 0o444 // none binary files should be read only
+			if strings.Contains(fileName, "tool") || strings.Contains(fileName, "bin") {
+				perm = 0o555
+			}
 			err = os.MkdirAll(filepath.Dir(dst), 0o755)
 			if err != nil {
 				return err
 			}
 
 			err = func() error {
-				out, err := os.OpenFile(dst, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(hdr.Mode))
+				out, err := os.OpenFile(dst, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(perm))
 				if err != nil {
 					return err
 				}
