@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -236,13 +237,14 @@ func (f *GoReleaseFile) ExtractTo(dstDir string) error {
 	if f.Kind != "archive" {
 		return fmt.Errorf("the file '%v' is not an archive", f.Filename)
 	}
-
 	if f.downloadedFile == nil {
 		return fmt.Errorf("Release file not yet downloaded")
 	}
-
 	if dstDir == "" {
 		return fmt.Errorf("no destination directory given to extract archive.")
+	}
+	if filepath.Ext(f.Filename) == ".zip" {
+		return f.extractFromZip(dstDir)
 	}
 
 	gzipReader, err := gzip.NewReader(bytes.NewReader(f.downloadedFile))
@@ -268,16 +270,14 @@ func (f *GoReleaseFile) ExtractTo(dstDir string) error {
 			return err
 		}
 
+		// prevent paths in archive from escaping dstDir
+		if !filepath.IsLocal(hdr.Name) {
+			continue
+		}
+
 		// this makes sure files are saved under the a directory named after the version instead of the directory go
 		fileName := strings.Replace(hdr.Name, "go", version, 1)
-
 		dst := filepath.Join(dstDir, fileName)
-
-		// prevent paths in archive from escaping dstDir
-		rel, err := filepath.Rel(dstDir, dst)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			return fmt.Errorf("invalid archive path: %s", hdr.Name)
-		}
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
@@ -303,6 +303,71 @@ func (f *GoReleaseFile) ExtractTo(dstDir string) error {
 				defer out.Close()
 
 				_, err = io.Copy(out, tarReader)
+				if err != nil {
+					return err
+				}
+
+				return nil
+			}()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (f *GoReleaseFile) extractFromZip(dstDir string) error {
+	byteReader := bytes.NewReader(f.downloadedFile)
+	byteReader.Seek(0, 0)
+
+	zipReader, err := zip.NewReader(byteReader, byteReader.Size())
+	if err != nil {
+		return err
+	}
+	version := f.CleanedVersion()
+
+	for _, f := range zipReader.File {
+		// prevent paths in archive from escaping dstDir
+		if !filepath.IsLocal(f.Name) {
+			continue
+		}
+
+		// this makes sure files are saved under the a directory named after the version instead of the directory go
+		fileName := strings.Replace(f.Name, "go", version, 1)
+		dst := filepath.Join(dstDir, fileName)
+
+		switch {
+		case f.FileInfo().IsDir():
+			err = os.MkdirAll(dst, 0o755)
+			if err != nil {
+				return err
+			}
+		default:
+			perm := 0o444 // none binary files should be read only
+			if strings.Contains(fileName, "tool") || strings.Contains(fileName, "bin") {
+				perm = 0o555
+			}
+			err = os.MkdirAll(filepath.Dir(dst), 0o755)
+			if err != nil {
+				return err
+			}
+
+			err = func() error {
+				out, err := os.OpenFile(dst, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(perm))
+				if err != nil {
+					return err
+				}
+				defer out.Close()
+
+				zFile, err := f.Open()
+				if err != nil {
+					return err
+				}
+				defer zFile.Close()
+
+				_, err = io.Copy(out, zFile)
 				if err != nil {
 					return err
 				}
