@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -40,6 +42,10 @@ func runList(cmd *cobra.Command, args []string) error {
 		heading = "Go Versions Installed by gover"
 		versions, err = GetInstalledVersions()
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				fmt.Println("No go versions found that were installed by gover.")
+				return nil
+			}
 			return err
 		}
 	}

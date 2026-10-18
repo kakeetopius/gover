@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"text/template"
 )
 
 var (
@@ -67,9 +68,9 @@ func GetInstallDirectory() (string, error) {
 		if base == "" {
 			return "", errors.New("LOCALAPPDATA is not set")
 		}
-		return filepath.Join(base, "Programs", "Go"), nil
+		return filepath.Join(base, "Programs", "Gover"), nil
 	default:
-		return filepath.Join(home, ".local", "go"), nil
+		return filepath.Join(home, ".local", "gover"), nil
 	}
 }
 
@@ -86,7 +87,7 @@ func GetDefaultBinDirectory() (string, error) {
 		if base == "" {
 			return "", errors.New("LOCALAPPDATA is not set")
 		}
-		return filepath.Join(base, "Programs", "Go", "bin"), nil
+		return filepath.Join(base, "Programs", "Gover", "bin"), nil
 	default:
 		return filepath.Join(home, ".local", "bin"), nil
 	}
@@ -127,7 +128,7 @@ func SymLinkGoBinary(version string, dstDir string) error {
 		return err
 	}
 
-	oldPath := filepath.Join(installDir, version, "bin", "go")
+	oldPath := filepath.Join(installDir, version, "bin", getBinaryName("go"))
 	info, err := os.Stat(oldPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -152,11 +153,15 @@ func SymLinkGoBinary(version string, dstDir string) error {
 	if err != nil {
 		return err
 	}
-	newPath := filepath.Join(dstDir, "go")
+	newPath := filepath.Join(dstDir, getBinaryName("go"))
 
 	err = os.Remove(newPath)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("error installing the go binary to the destination directory: %w", err)
+	}
+
+	if runtime.GOOS == "windows" {
+		return createWindowsLauncher(oldPath, newPath)
 	}
 
 	err = os.Symlink(oldPath, newPath)
@@ -229,3 +234,57 @@ func DeleteVersionDirectory(version string) error {
 
 	return os.RemoveAll(versionDir)
 }
+
+func getBinaryName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+
+	return name
+}
+
+func replaceExtension(fileName string, newExt string) string {
+	ext := filepath.Ext(fileName)
+	return strings.TrimSuffix(fileName, ext) + newExt
+}
+
+func createWindowsLauncher(goBinaryPath string, launcherPath string) error {
+	tmpl, err := template.New("launcher").Parse(windowsLauncher)
+	if err != nil {
+		return err
+	}
+	launcherPath = replaceExtension(launcherPath, ".cmd")
+
+	launcher, err := os.OpenFile(launcherPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0777)
+	if err != nil {
+		return err
+	}
+	defer launcher.Close()
+
+	err = tmpl.Execute(launcher, BinaryPath{
+		Path: goBinaryPath,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type BinaryPath struct {
+	Path string
+}
+
+var windowsLauncher = `@echo off
+setlocal
+
+set "APP_PATH={{.Path}}"
+
+if not exist "%APP_PATH%" (
+    echo Error: Binary not found: "%APP_PATH%"
+    exit /b 1
+)
+
+"%APP_PATH%" %*
+exit /b %ERRORLEVEL%
+`
