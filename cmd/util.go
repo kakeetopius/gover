@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"go/version"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -17,7 +19,7 @@ var (
 	ErrCouldNotGetVersion = errors.New("could not get the current go version")
 )
 
-// GetCurrentGoVersion returns the version of first go binary found in the environments' PATH variable
+// GetCurrentGoVersion returns the version of first go binary found in the environments' PATH variable in the format go1.20.3
 // It returns [ErrGoNotInstalled] if no go binary is found or [ErrCouldNotGetVersion] if the output from
 // the command 'go version' is not the expected one.
 func GetCurrentGoVersion() (string, error) {
@@ -38,7 +40,7 @@ func GetCurrentGoVersion() (string, error) {
 
 	err = cmd.Run()
 	if err != nil {
-		return "", err
+		return "", ErrCouldNotGetVersion
 	}
 	re, err := regexp.Compile(`go version (go\d+\.\d+(?:\.\d+)?)`)
 	if err != nil {
@@ -176,4 +178,43 @@ func setEnv(env []string, key, value string) []string {
 	}
 
 	return append(result, prefix+value)
+}
+
+// GetInstalledVersions returns all versions installed in the directory returned by [GetInstallDirectory]
+func GetInstalledVersions() ([]string, error) {
+	installDir, err := GetInstallDirectory()
+	if err != nil {
+		return nil, err
+	}
+
+	dirInfo, err := os.ReadDir(installDir)
+	if err != nil {
+		return nil, err
+	}
+
+	installedVersions := make([]string, 0, len(dirInfo))
+	for _, entry := range dirInfo {
+		if !entry.IsDir() {
+			continue
+		}
+		// directory names are in the form 1.26.0 but required format is go1.26.0
+		name := "go" + entry.Name()
+
+		if !version.IsValid(name) {
+			continue
+		}
+
+		installedVersions = append(installedVersions, name)
+	}
+
+	return SortVersions(installedVersions), nil
+}
+
+// SortVersions sorts the versions from newest release to oldest.
+func SortVersions(versions []string) []string {
+	slices.SortFunc(versions, func(a, b string) int {
+		return -version.Compare(a, b)
+	})
+
+	return versions
 }

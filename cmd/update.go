@@ -3,6 +3,7 @@ package cmd
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"go/version"
 	"os"
@@ -63,7 +64,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("latest go version is %v\n", versionNum)
 
 	currentVersion, err := GetCurrentGoVersion()
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrCouldNotGetVersion) && !errors.Is(err, ErrGoNotInstalled) {
 		return err
 	}
 

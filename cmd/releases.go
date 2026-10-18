@@ -72,6 +72,24 @@ func GetReleases(ctx context.Context, includeAll bool) (GoReleases, error) {
 	return releases, nil
 }
 
+func (r GoReleases) First() *GoRelease {
+	if len(r) > 0 {
+		return &r[0]
+	}
+
+	return nil
+}
+
+func (r GoReleases) VersionsSlice() []string {
+	versions := make([]string, 0, len(r))
+
+	for _, release := range r {
+		versions = append(versions, release.Version)
+	}
+
+	return versions
+}
+
 func (r GoReleases) Filter(f ReleasesFilterFunc) GoReleases {
 	filtered := make([]GoRelease, 0)
 	for _, release := range r {
@@ -84,18 +102,23 @@ func (r GoReleases) Filter(f ReleasesFilterFunc) GoReleases {
 	return filtered
 }
 
-func (r GoReleases) First() *GoRelease {
-	if len(r) > 0 {
-		return &r[0]
-	}
-
-	return nil
+func FilterReleaseStable(r GoRelease) bool {
+	return r.Stable
 }
 
-func (r GoReleases) Version(version string) *GoRelease {
-	r = r.Filter(FilterVersion(version))
-	if len(r) > 0 {
-		return &r[0]
+func FilterReleaseUnstable(r GoRelease) bool {
+	return !r.Stable
+}
+
+func FilterVersion(version string) ReleasesFilterFunc {
+	return func(r GoRelease) bool {
+		return r.Version == version
+	}
+}
+
+func (r *GoRelease) FirstFile() *GoReleaseFile {
+	if len(r.Files) > 0 {
+		return &r.Files[0]
 	}
 
 	return nil
@@ -113,28 +136,6 @@ func (r *GoRelease) Filter(f ReleaseFilesFilterFunc) *GoRelease {
 
 	r.Files = newFiles
 	return r
-}
-
-func (r *GoRelease) FirstFile() *GoReleaseFile {
-	if len(r.Files) > 0 {
-		return &r.Files[0]
-	}
-
-	return nil
-}
-
-func FilterReleaseStable(r GoRelease) bool {
-	return r.Stable
-}
-
-func FilterReleaseUnstable(r GoRelease) bool {
-	return !r.Stable
-}
-
-func FilterVersion(version string) ReleasesFilterFunc {
-	return func(r GoRelease) bool {
-		return r.Version == "go"+version
-	}
 }
 
 func FilterFileKind(kind string) ReleaseFilesFilterFunc {
@@ -168,10 +169,6 @@ func (f *GoReleaseFile) Download(ctx context.Context) error {
 	f.downloadedFile, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return err
-	}
-
-	if len(f.downloadedFile) != f.Size {
-		return fmt.Errorf("received an incomplete or corrupted release file.")
 	}
 
 	return nil
@@ -214,6 +211,9 @@ func (e ErrChecksumMismatch) Error() string {
 func (f *GoReleaseFile) VerifyChecksum() error {
 	if f.downloadedFile == nil {
 		return fmt.Errorf("Release file not yet downloaded")
+	}
+	if f.SHA256 == "" {
+		return nil
 	}
 
 	sha := sha256.New()

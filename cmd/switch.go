@@ -3,10 +3,12 @@ package cmd
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"go/version"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -25,14 +27,21 @@ func SwitchCommand() *cobra.Command {
 
 func runSwitch(cmd *cobra.Command, args []string) error {
 	currentVersion, err := GetCurrentGoVersion()
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrCouldNotGetVersion) && !errors.Is(err, ErrGoNotInstalled) {
 		return err
 	}
 	if len(args) == 0 {
 		return fmt.Errorf("no new version given")
 	}
-	wantedVersionNum := args[0]
-	wantedVersion := fmt.Sprintf("go%v", wantedVersionNum)
+	wantedVersionNum := args[0] // required foramt: 1.19.2, 1.9 etc
+	var wantedVersion string    // required format: go1.19.2, go1.9 etc
+
+	if strings.HasPrefix(wantedVersionNum, "go") {
+		wantedVersion = wantedVersionNum
+		wantedVersionNum = strings.TrimPrefix(wantedVersionNum, "go")
+	} else {
+		wantedVersion = fmt.Sprintf("go%v", wantedVersionNum)
+	}
 
 	if !version.IsValid(wantedVersion) {
 		return fmt.Errorf("invalid go version: %v", wantedVersionNum)
@@ -84,11 +93,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	}
 
 	release := releases.
-		Filter(FilterVersion(wantedVersionNum)).
+		Filter(FilterVersion(wantedVersion)).
 		First()
 
 	if release == nil {
-		return fmt.Errorf("Could not find go version %v", wantedVersionNum)
+		return fmt.Errorf("Could not find go version %v for %v/%v", wantedVersionNum, goos, goarch)
 	}
 
 	releaseArchive := release.
@@ -97,7 +106,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		Filter(FilterFileKind("archive")).
 		FirstFile()
 	if releaseArchive == nil {
-		return fmt.Errorf("Could not find go version %v", wantedVersionNum)
+		return fmt.Errorf("Could not find go version %v for %v/%v", wantedVersionNum, goos, goarch)
 	}
 
 	fmt.Printf("go version %v found online\n", wantedVersionNum)

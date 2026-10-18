@@ -13,6 +13,7 @@ func Command() *cobra.Command {
 	rootCmd.AddCommand(
 		UpdateCommand(),
 		SwitchCommand(),
+		ListCommand(),
 	)
 
 	return rootCmd
