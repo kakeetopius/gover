@@ -21,8 +21,6 @@ func UpdateCommand() *cobra.Command {
 		RunE:         runUpdate,
 	}
 
-	updateCommand.Flags().Bool("force", false, "Force update.")
-
 	return updateCommand
 }
 
@@ -68,10 +66,6 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	force, err := cmd.Flags().GetBool("force")
-	if err != nil {
-		return err
-	}
 	binDir, err := GetDefaultBinDirectory()
 	if err != nil {
 		return err
@@ -82,7 +76,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if version.Compare(currentVersion, releease.Version) >= 0 && !force {
+	if version.Compare(currentVersion, releease.Version) >= 0 {
 		fmt.Println("Already at the latest go version. Nothing to update.")
 		return nil
 	}
@@ -91,7 +85,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if alreadyInstalled && !force {
+	if alreadyInstalled {
 		err = SymLinkGoBinary(versionNum, binDir)
 		if err != nil {
 			return err
