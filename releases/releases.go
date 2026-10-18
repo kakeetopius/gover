@@ -1,4 +1,5 @@
-package cmd
+// Package releases is used to work with go releases.
+package releases
 
 import (
 	"archive/tar"
@@ -53,7 +54,7 @@ type queryParams struct {
 	Include string `url:"include,omitempty"`
 }
 
-func GetReleases(ctx context.Context, includeAll bool) (GoReleases, error) {
+func Get(ctx context.Context, includeAll bool) (GoReleases, error) {
 	params := queryParams{
 		Mode: "json",
 	}
@@ -103,11 +104,11 @@ func (r GoReleases) Filter(f ReleasesFilterFunc) GoReleases {
 	return filtered
 }
 
-func FilterReleaseStable(r GoRelease) bool {
+func FilterStable(r GoRelease) bool {
 	return r.Stable
 }
 
-func FilterReleaseUnstable(r GoRelease) bool {
+func FilterUnstable(r GoRelease) bool {
 	return !r.Stable
 }
 
@@ -175,7 +176,7 @@ func (f *GoReleaseFile) Download(ctx context.Context) error {
 	return nil
 }
 
-func (f *GoReleaseFile) CleanedVersion() string {
+func (f *GoReleaseFile) VersionNum() string {
 	// f.Version is in format go27.0.2 so we remove the word go
 	return strings.TrimPrefix(f.Version, "go")
 }
@@ -258,7 +259,7 @@ func (f *GoReleaseFile) ExtractTo(dstDir string) error {
 		return err
 	}
 
-	version := f.CleanedVersion()
+	version := f.VersionNum()
 
 	for {
 		hdr, err := tarReader.Next()
@@ -326,7 +327,7 @@ func (f *GoReleaseFile) extractFromZip(dstDir string) error {
 	if err != nil {
 		return err
 	}
-	version := f.CleanedVersion()
+	version := f.VersionNum()
 
 	for _, f := range zipReader.File {
 		// prevent paths in archive from escaping dstDir

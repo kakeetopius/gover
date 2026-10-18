@@ -1,15 +1,14 @@
 package cmd
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"go/version"
-	"os"
 	"path/filepath"
-	"runtime"
 
+	"github.com/kakeetopius/gover/releases"
+	"github.com/kakeetopius/gover/util"
 	"github.com/spf13/cobra"
 )
 
@@ -33,52 +32,45 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("Getting go versions...")
-	releases, err := GetReleases(context.Background(), false)
+	allReleases, err := releases.Get(context.Background(), false)
 	if err != nil {
 		return err
 	}
 	if !allowUnstable {
-		releases = releases.Filter(FilterReleaseStable)
+		allReleases = allReleases.Filter(releases.FilterStable)
 	}
 
-	goos := cmp.Or(os.Getenv("GOOS"), runtime.GOOS)
-	goarch := cmp.Or(os.Getenv("GOARCH"), runtime.GOARCH)
-	if goos == "" {
-		return fmt.Errorf("could not GOOS environment variable. make sure to set it")
-	}
-	if goarch == "" {
-		return fmt.Errorf("could not GOARCH environment variable. make sure to set it")
-	}
+	goos, goarch := util.OsAndArch()
 
-	releease := releases.First() // returns the latest version
+	releease := allReleases.First() // returns the latest version
 	if releease == nil {
 		return fmt.Errorf("could not get the latest go release for %v/%v", goos, goarch)
 	}
 
 	releaseFile := releease.
-		Filter(FilterOS(goos)).
-		Filter(FilterArch(goarch)).
-		Filter(FilterFileKind("archive")).
+		Filter(releases.FilterOS(goos)).
+		Filter(releases.FilterArch(goarch)).
+		Filter(releases.FilterFileKind("archive")).
 		FirstFile()
 
 	if releaseFile == nil {
 		return fmt.Errorf("could not get the latest go release for %v/%v", goos, goarch)
 	}
-	versionNum := releaseFile.CleanedVersion()
+	versionNum := releaseFile.VersionNum()
 
 	fmt.Printf("latest go version is %v\n", versionNum)
 
-	currentVersion, err := GetCurrentGoVersion()
-	if err != nil && !errors.Is(err, ErrCouldNotGetVersion) && !errors.Is(err, ErrGoNotInstalled) {
+	currentVersion, err := util.GetCurrentGoVersion()
+	if err != nil && !errors.Is(err, util.ErrCouldNotGetVersion) && !errors.Is(err, util.ErrGoNotInstalled) {
 		return err
 	}
 
-	binDir, err := GetDefaultBinDirectory()
+	binDir, err := util.GetDefaultBinDirectory()
 	if err != nil {
 		return err
 	}
 
-	installDir, err := GetInstallDirectory()
+	installDir, err := util.GetInstallDirectory()
 	if err != nil {
 		return err
 	}
@@ -88,12 +80,12 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	alreadyInstalled, err := CheckIfGoVersionIsInstalled(versionNum)
+	alreadyInstalled, err := util.CheckIfGoVersionIsInstalled(versionNum)
 	if err != nil {
 		return err
 	}
 	if alreadyInstalled {
-		err = SymLinkGoBinary(versionNum, binDir)
+		err = util.SymLinkGoBinary(versionNum, binDir)
 		if err != nil {
 			return err
 		}
@@ -123,7 +115,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("Extraction Complete")
 
-	err = SymLinkGoBinary(versionNum, binDir)
+	err = util.SymLinkGoBinary(versionNum, binDir)
 	if err != nil {
 		return err
 	}

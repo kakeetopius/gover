@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 	"go/version"
-	"strings"
 
+	"github.com/kakeetopius/gover/util"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +29,7 @@ func runPurge(cmd *cobra.Command, args []string) error {
 
 	toPurge := args
 	if purgeAll {
-		toPurge, err = GetInstalledVersions()
+		toPurge, err = util.GetInstalledVersions()
 		if err != nil {
 			return err
 		}
@@ -43,22 +43,14 @@ func runPurge(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, v := range toPurge {
-		versionNum := v       // required foramt: 1.19.2, 1.9 etc
-		var versionStr string // required format: go1.19.2, go1.9 etc
-
-		if strings.HasPrefix(versionNum, "go") {
-			versionStr = versionNum
-			versionNum = strings.TrimPrefix(versionNum, "go")
-		} else {
-			versionStr = fmt.Sprintf("go%v", versionNum)
-		}
+		versionStr, versionNum := versionStringAndNumber(v)
 
 		if !version.IsValid(versionStr) {
 			fmt.Printf("invalid go version: %v\n", versionNum)
 			continue
 		}
 
-		isInstalled, err := CheckIfGoVersionIsInstalled(versionNum)
+		isInstalled, err := util.CheckIfGoVersionIsInstalled(versionNum)
 		if err != nil {
 			return fmt.Errorf("could not purge go version %v: %w", versionNum, err)
 		}
@@ -67,7 +59,7 @@ func runPurge(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		err = DeleteVersionDirectory(versionNum)
+		err = util.DeleteVersionDirectory(versionNum)
 		if err != nil {
 			return fmt.Errorf("could not purge go version %v: %w", versionNum, err)
 		}

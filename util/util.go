@@ -1,7 +1,9 @@
-package cmd
+// Package util contains some utility functions for gover.
+package util
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"go/version"
@@ -172,6 +174,10 @@ func SymLinkGoBinary(version string, dstDir string) error {
 	return nil
 }
 
+func OsAndArch() (string, string) {
+	return cmp.Or(os.Getenv("GOOS"), runtime.GOOS), cmp.Or(os.Getenv("GOARCH"), runtime.GOARCH)
+}
+
 func setEnv(env []string, key, value string) []string {
 	prefix := key + "="
 	result := make([]string, 0, len(env)+1)
@@ -255,7 +261,7 @@ func createWindowsLauncher(goBinaryPath string, launcherPath string) error {
 	}
 	launcherPath = replaceExtension(launcherPath, ".cmd")
 
-	launcher, err := os.OpenFile(launcherPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0777)
+	launcher, err := os.OpenFile(launcherPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o777)
 	if err != nil {
 		return err
 	}

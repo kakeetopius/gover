@@ -1,15 +1,13 @@
 package cmd
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"go/version"
-	"os"
-	"runtime"
-	"strings"
 
+	"github.com/kakeetopius/gover/releases"
+	"github.com/kakeetopius/gover/util"
 	"github.com/spf13/cobra"
 )
 
@@ -26,22 +24,14 @@ func SwitchCommand() *cobra.Command {
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
-	currentVersion, err := GetCurrentGoVersion()
-	if err != nil && !errors.Is(err, ErrCouldNotGetVersion) && !errors.Is(err, ErrGoNotInstalled) {
+	currentVersion, err := util.GetCurrentGoVersion()
+	if err != nil && !errors.Is(err, util.ErrCouldNotGetVersion) && !errors.Is(err, util.ErrGoNotInstalled) {
 		return err
 	}
 	if len(args) == 0 {
 		return fmt.Errorf("no new version given")
 	}
-	wantedVersionNum := args[0] // required foramt: 1.19.2, 1.9 etc
-	var wantedVersion string    // required format: go1.19.2, go1.9 etc
-
-	if strings.HasPrefix(wantedVersionNum, "go") {
-		wantedVersion = wantedVersionNum
-		wantedVersionNum = strings.TrimPrefix(wantedVersionNum, "go")
-	} else {
-		wantedVersion = fmt.Sprintf("go%v", wantedVersionNum)
-	}
+	wantedVersion, wantedVersionNum := versionStringAndNumber(args[0])
 
 	if !version.IsValid(wantedVersion) {
 		return fmt.Errorf("invalid go version: %v", wantedVersionNum)
@@ -52,21 +42,21 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	binDir, err := GetDefaultBinDirectory()
+	binDir, err := util.GetDefaultBinDirectory()
 	if err != nil {
 		return err
 	}
-	installDir, err := GetInstallDirectory()
+	installDir, err := util.GetInstallDirectory()
 	if err != nil {
 		return err
 	}
-	alreadyInstalled, err := CheckIfGoVersionIsInstalled(wantedVersionNum)
+	alreadyInstalled, err := util.CheckIfGoVersionIsInstalled(wantedVersionNum)
 	if err != nil {
 		return err
 	}
 
 	if alreadyInstalled {
-		err = SymLinkGoBinary(wantedVersionNum, "")
+		err = util.SymLinkGoBinary(wantedVersionNum, "")
 		if err != nil {
 			return err
 		}
@@ -78,22 +68,15 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	fmt.Printf("go version %v not found offline\n", wantedVersionNum)
 
 	fmt.Println("Getting go versions...")
-	releases, err := GetReleases(context.Background(), true)
+	allReleases, err := releases.Get(context.Background(), true)
 	if err != nil {
 		return err
 	}
 
-	goos := cmp.Or(os.Getenv("GOOS"), runtime.GOOS)
-	goarch := cmp.Or(os.Getenv("GOARCH"), runtime.GOARCH)
-	if goos == "" {
-		return fmt.Errorf("could not GOOS environment variable. make sure to set it")
-	}
-	if goarch == "" {
-		return fmt.Errorf("could not GOARCH environment variable. make sure to set it")
-	}
+	goos, goarch := util.OsAndArch()
 
-	release := releases.
-		Filter(FilterVersion(wantedVersion)).
+	release := allReleases.
+		Filter(releases.FilterVersion(wantedVersion)).
 		First()
 
 	if release == nil {
@@ -101,9 +84,9 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	}
 
 	releaseArchive := release.
-		Filter(FilterOS(goos)).
-		Filter(FilterArch(goarch)).
-		Filter(FilterFileKind("archive")).
+		Filter(releases.FilterOS(goos)).
+		Filter(releases.FilterArch(goarch)).
+		Filter(releases.FilterFileKind("archive")).
 		FirstFile()
 	if releaseArchive == nil {
 		return fmt.Errorf("Could not find go version %v for %v/%v", wantedVersionNum, goos, goarch)
@@ -132,7 +115,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("Extraction Complete")
 
-	err = SymLinkGoBinary(wantedVersionNum, binDir)
+	err = util.SymLinkGoBinary(wantedVersionNum, binDir)
 	if err != nil {
 		return err
 	}

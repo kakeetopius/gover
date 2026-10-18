@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kakeetopius/gover/releases"
+	"github.com/kakeetopius/gover/util"
 	"github.com/spf13/cobra"
 )
 
@@ -33,21 +35,22 @@ func runList(cmd *cobra.Command, args []string) error {
 	if all {
 		heading = "All Go Versions"
 		fmt.Println("Getting all go versions...")
-		releases, err := GetReleases(context.Background(), true)
+		releases, err := releases.Get(context.Background(), true)
 		if err != nil {
 			return err
 		}
 		versions = releases.VersionsSlice()
 	} else {
 		heading = "Go Versions Installed by gover"
-		versions, err = GetInstalledVersions()
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				fmt.Println("No go versions found that were installed by gover.")
-				return nil
-			}
+		versions, err = util.GetInstalledVersions()
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
+	}
+
+	if len(versions) == 0 {
+		fmt.Println("No go versions found that were installed by gover.")
+		return nil
 	}
 
 	fmt.Println(heading)
